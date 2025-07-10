@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   
-  struct sockaddr_in server_addr;
+  struct sockaddr_in server_addr{};
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
   server_addr.sin_port = htons(6379);
@@ -42,31 +42,62 @@ int main(int argc, char **argv) {
     std::cerr << "listen failed\n";
     return 1;
   }
+  make_non_blocking(server_fd);
   
-  struct sockaddr_in client_addr;
+  struct sockaddr_in client_addr{};
   int client_addr_len = sizeof(client_addr);
   std::cout << "Waiting for a client to connect...\n";
 
   // You can use print statements as follows for debugging, they'll be visible when running tests.
   std::cout << "Logs from your program will appear here!\n";
 
+  fd_set master_set,read_set;
+  FD_ZERO(&master_set);
+  FD_SET(server_fd,master_set);
+  int max_fd = server_fd;
+
+  while(true){
+    read_set = master_set;
+    select(max_fd + 1,&read _set, nullptr, nullptr, nullptr);
+
+    for(int fd=0;fd<=max_fd,fd++){
+      
+      if(!FD_ISSET(fd,&read_set))
+        continue;
+     //for accepting new client
+      if(fd==server_fd){
+        int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, (socklen_t*)&client_addr_len);
+        make_non_blocking(client_fd);
+        FD_SET(client_fd, &master_set):
+        if(client_fd>max_fd
+          max_fd = client_fd;
+        std::cout << "New Client Connected\n";  
+      }
   
-  int client_fd = accept(server_fd, (struct sockaddr * ) &client_addr, (socklen_t *) &client_addr_len);
-  std::cout << "Client connected\n";
+      else{
+          char buffer[1024];
+          int bytes_read = recv(fd, buffer, sizeof(buffer)-1, 0);
+          if (bytes_read <=0){
+            std::cout << "Client disconnected\n";
+            close(fd);
+            FD_CLR(fd, &master_set);
+          }
+          else{
+            buffer[bytes_read] ='\0';
+            std:: string response = "+PONG\r\n";
+            send(fd,response.c_str(), response.size(), 0);
+ 
+          }
+      }
 
-  while (true) {
-    char buffer[1024];
-    int bytes_read = recv(client_fd, buffer, sizeof(buffer), 0);
-    if (bytes_read <=0){
-      std::cout << "Client disconnected\n";
-      break;
+
     }
-    
-    std:: string response = "+PONG\r\n";
-    send(client_fd,response.c_str(), response.size(), 0);
-  }
 
-  close(client_fd);
+   
+    
+
+     }
+
   close(server_fd);
 
   return 0;
