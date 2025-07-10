@@ -2,11 +2,17 @@
 #include <cstdlib>
 #include <string>
 #include <cstring>
+#include <vector>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <fcntl.h>
+
+int make_non_blocking(int fd){
+  return fcntl(fd, F_SETFL, fcntl(fd,F_GETFL,0) | O_NONBLOCK);
+}
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -53,7 +59,7 @@ int main(int argc, char **argv) {
 
   fd_set master_set,read_set;
   FD_ZERO(&master_set);
-  FD_SET(server_fd,master_set);
+  FD_SET(server_fd, &master_set);
   int max_fd = server_fd;
 
   while(true){
