@@ -90,19 +90,25 @@ int main(int argc, char **argv) {
           }
           else{
             buffer[bytes_read] ='\0';
-            std:: string response = "+PONG\r\n";
-            send(fd,response.c_str(), response.size(), 0);
+            std::string input(buffer);
+            if(input.find("PING") != std::string::npos){
+              std:: string response = "+PONG\r\n";
+              send(fd,response.c_str(), response.size(), 0);
+            }
+            else{
+              std::string mssg = input.substr(5);
+              if(mssg.size()>=2 && mssg.sustr(mssg.size()-2)=="\r\n"){
+                mssg = mssg.substr(0,mssg.size()-2);
+              }
+              std::string response = mssg + "\r\n";
+              send(fd,response.c_str(),mssg.size(),0);
+            }
+            
  
           }
       }
-
-
     }
-
-   
-    
-
-     }
+ }
 
   close(server_fd);
 
