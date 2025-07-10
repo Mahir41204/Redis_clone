@@ -58,9 +58,9 @@ int main(int argc, char **argv) {
 
   while(true){
     read_set = master_set;
-    select(max_fd + 1,&read _set, nullptr, nullptr, nullptr);
+    select(max_fd + 1,&read_set, nullptr, nullptr, nullptr);
 
-    for(int fd=0;fd<=max_fd,fd++){
+    for(int fd=0;fd<=max_fd;fd++){
       
       if(!FD_ISSET(fd,&read_set))
         continue;
@@ -68,8 +68,8 @@ int main(int argc, char **argv) {
       if(fd==server_fd){
         int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, (socklen_t*)&client_addr_len);
         make_non_blocking(client_fd);
-        FD_SET(client_fd, &master_set):
-        if(client_fd>max_fd
+        FD_SET(client_fd, &master_set);
+        if(client_fd>max_fd)
           max_fd = client_fd;
         std::cout << "New Client Connected\n";  
       }
