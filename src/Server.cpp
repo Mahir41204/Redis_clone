@@ -13,6 +13,16 @@
 int make_non_blocking(int fd){
   return fcntl(fd, F_SETFL, fcntl(fd,F_GETFL,0) | O_NONBLOCK);
 }
+string parse_echo_argument(const string& input){
+  size_t pos = input.find("\r\n");
+  pos = input.find("\r\n",pos+2);
+  pos = input.find("\r\n",pos+2);
+  pos = input.find("\r\n",pos+2);
+
+  size_t mssg_begin = pos+2;
+  size_t mssg_end = input.find("\r\n", mssg_begin);
+  return input.substr(mssg_begin, mssg_end-mssg_begin);
+}
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
