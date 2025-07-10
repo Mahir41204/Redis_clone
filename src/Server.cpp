@@ -13,15 +13,11 @@
 int make_non_blocking(int fd){
   return fcntl(fd, F_SETFL, fcntl(fd,F_GETFL,0) | O_NONBLOCK);
 }
-std::string parse_echo_argument(const std::string& input){
-  size_t pos = input.find("\r\n");
-  pos = input.find("\r\n",pos+2);
-  pos = input.find("\r\n",pos+2);
-  pos = input.find("\r\n",pos+2);
-
-  size_t mssg_begin = pos+2;
-  size_t mssg_end = input.find("\r\n", mssg_begin);
-  return input.substr(mssg_begin, mssg_end-mssg_begin);
+std::string read_line(const std::string & data,size_t & pos){
+  size_t end =data.find("\r\n",pos);
+  std::string line =data.substr(pos,end-pos);
+  pos = end+2;
+  return line;
 }
 
 int main(int argc, char **argv) {
@@ -101,15 +97,26 @@ int main(int argc, char **argv) {
           else{
             buffer[bytes_read] ='\0';
             std::string input(buffer);
-            if(input.find("PING") != std::string::npos){
-              std:: string response = "+PONG\r\n";
-              send(fd,response.c_str(), response.size(), 0);
+            size_t pos=0;
+            if(input[0]=="*"){
+              int arg_count std::stoi(read_line(input, pos).substr(1));
+              std::string command = read_line(input, pos);
+              command =read_line(input, pos);
+              
+              if(command == "PING"){
+                std:: string response = "+PONG\r\n";
+                send(fd,response.c_str(), response.size(), 0);
+              }
+              else if(command =="ECHO"){
+                std::string mssg_len = read_line(input,pos);
+                int len = std::stoi(mssg_len.substr(1));
+                std::string mssg =read_line(input,pos);
+                mssg = "$" + mssg + "\r\n" ;
+                send(fd,mssg.c_str(),mssg.size(),0);
+              }
+            
             }
-            else if(input.find("*2\r\n$4\r\nECHO")==0){
-              std::string mssg = parse_echo_argument(input);
-              mssg = "$" + mssg + "\r\n" ;
-              send(fd,mssg.c_str(),mssg.size(),0);
-            }
+            
             
  
           }
