@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
               if(mssg.size()>=2 && mssg.substr(mssg.size()-2)=="\r\n"){
                 mssg = mssg.substr(0,mssg.size()-2);
               }
-              std::string response = mssg + "\r\n";
+              std::string response = mssg;
               send(fd,response.c_str(),mssg.size(),0);
             }
             
