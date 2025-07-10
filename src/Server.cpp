@@ -98,8 +98,8 @@ int main(int argc, char **argv) {
             buffer[bytes_read] ='\0';
             std::string input(buffer);
             size_t pos=0;
-            if(input[0]=="*"){
-              int arg_count std::stoi(read_line(input, pos).substr(1));
+            if(input[0]=='*'){
+              int arg_count=std::stoi(read_line(input, pos).substr(1));
               std::string command = read_line(input, pos);
               command =read_line(input, pos);
               
