@@ -107,11 +107,11 @@ int main(int argc, char **argv) {
                 std:: string response = "+PONG\r\n";
                 send(fd,response.c_str(), response.size(), 0);
               }
-              else if(command =="ECHO"){
+              else if(command =="ECHO" && arg_count==2){
                 std::string mssg_len = read_line(input,pos);
-                int len = std::stoi(mssg_len.substr(1));
+                //int len = std::stoi(mssg_len.substr(1));
                 std::string mssg =read_line(input,pos);
-                std::string response = "*" + mssg + "\r\n" ;
+                std::string response = "$" + std::to_string(mssg.size()) + "\r\n" + mssg + "\r\n" ;
                 send(fd,response.c_str(),response.size(),0);
               }
             
