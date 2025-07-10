@@ -111,8 +111,8 @@ int main(int argc, char **argv) {
                 std::string mssg_len = read_line(input,pos);
                 int len = std::stoi(mssg_len.substr(1));
                 std::string mssg =read_line(input,pos);
-                mssg = "$" + mssg + "\r\n" ;
-                send(fd,mssg.c_str(),mssg.size(),0);
+                std::response = mssg + "\r\n" ;
+                send(fd,response.c_str(),response.size(),0);
               }
             
             }
