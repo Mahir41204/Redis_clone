@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
             }
             else{
               std::string mssg = input.substr(5);
-              if(mssg.size()>=2 && mssg.sustr(mssg.size()-2)=="\r\n"){
+              if(mssg.size()>=2 && mssg.substr(mssg.size()-2)=="\r\n"){
                 mssg = mssg.substr(0,mssg.size()-2);
               }
               std::string response = mssg + "\r\n";
