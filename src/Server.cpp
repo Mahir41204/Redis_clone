@@ -13,7 +13,7 @@
 int make_non_blocking(int fd){
   return fcntl(fd, F_SETFL, fcntl(fd,F_GETFL,0) | O_NONBLOCK);
 }
-string parse_echo_argument(const string& input){
+std::string parse_echo_argument(const std::string& input){
   size_t pos = input.find("\r\n");
   pos = input.find("\r\n",pos+2);
   pos = input.find("\r\n",pos+2);
