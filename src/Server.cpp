@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
             }
             else if(input.find("*2\r\n$4\r\nECHO")==0){
               std::string mssg = parse_echo_argument(input);
-              mssg = "$" + mssg ;
+              mssg = "$" + mssg + "\r\n" ;
               send(fd,mssg.c_str(),mssg.size(),0);
             }
             
