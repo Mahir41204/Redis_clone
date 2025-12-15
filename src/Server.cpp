@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <fcntl.h>
 #include <unordered_map>
+#include <chrono>
 
 int make_non_blocking(int fd){
   return fcntl(fd, F_SETFL, fcntl(fd,F_GETFL,0) | O_NONBLOCK);
@@ -32,7 +33,7 @@ std::string read_line(const std::string & data,size_t & pos){
 struct Expiry_db{
   std::string value;
   long long expire_time_ms; 
-}
+};
 
 //in-memory db...hash table...
 std::unordered_map<std::string,Expiry_db> db;
@@ -44,6 +45,10 @@ long long current_time(){
   return duration_cast<milliseconds>(
     steady_clock::now().time_since_epoch()
   ).count();
+}
+
+bool is_expired(const Expiry_db & e){
+  return ((e.expire_time_ms != NO_EXPIRY) && current_time() >= e.expire_time_ms);
 }
 
 int main(int argc, char **argv) {
@@ -165,6 +170,9 @@ int main(int argc, char **argv) {
                     c=std::toupper(static_cast<unsigned char>(c));
                   }
 
+                  std::string ttl_len_line = read_line(input,pos);
+                  std::string ttl_str = read_line(input,pos);
+
                   if(option == "PX"){
                     long long ttl_ms = std::stoll(ttl_str);
                     expire_time = current_time() + ttl_ms;
@@ -188,16 +196,18 @@ int main(int argc, char **argv) {
                   response = "$-1\r\n";
                 }
                 else{
-                  
+                  //Expiry_db &edb = it->second;
+
                   if(is_expired(it->second)){
                     db.erase(it);
                     response = "$-1\r\n";
                   }
                   else{
-                    const std::string &value = it->second;
+                    
+                    const std::string &value = it->second.value;
                     response = "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
                   }
-                  
+
                 }
                 send(fd,response.c_str(),response.size(),0);
               }
