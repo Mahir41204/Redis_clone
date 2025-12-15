@@ -28,8 +28,23 @@ std::string read_line(const std::string & data,size_t & pos){
   return line;
 }
 
+//for db with expiry time
+struct Expiry_db{
+  std::string value;
+  long long expire_time_ms; 
+}
+
 //in-memory db...hash table...
-std::unordered_map<std::string,std::string> db;
+std::unordered_map<std::string,Expiry_db> db;
+const long long NO_EXPIRY = -1;
+
+//current time in ms
+long long current_time(){
+  using namespace std::chrono;
+  return duration_cast<milliseconds>(
+    steady_clock::now().time_since_epoch()
+  ).count();
+}
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -131,7 +146,7 @@ int main(int argc, char **argv) {
                 std::string response = "$" + std::to_string(mssg.size()) + "\r\n" + mssg + "\r\n" ;
                 send(fd,response.c_str(),response.size(),0);
               }
-              else if(command == "SET" && arg_count==3){
+              else if(command == "SET" && (arg_count==3 || arg_count==5)){
                 //reading key
                 std::string key_len_line = read_line(input,pos);
                 std::string key = read_line(input,pos);
@@ -140,8 +155,24 @@ int main(int argc, char **argv) {
                 std::string val_len_line = read_line(input,pos);
                 std::string value = read_line(input,pos);
 
+                long long expire_time = NO_EXPIRY;
+
+                if(arg_count==5){
+                  std::string option_len_line = read_line(input,pos);
+                  std::string option = read_line(input,pos);
+
+                  for(char &c : option){
+                    c=std::toupper(static_cast<unsigned char>(c));
+                  }
+
+                  if(option == "PX"){
+                    long long ttl_ms = std::stoll(ttl_str);
+                    expire_time = current_time() + ttl_ms;
+                  }
+
+                }
                 //store in db
-                db[key]=value;
+                db[key]=Expiry_db{value,expire_time};
 
                 std::string response = "+OK\r\n";
                 send(fd,response.c_str(),response.size(),0);
@@ -157,8 +188,16 @@ int main(int argc, char **argv) {
                   response = "$-1\r\n";
                 }
                 else{
-                  const std::string &value = it->second;
-                  response = "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
+                  
+                  if(is_expired(it->second)){
+                    db.erase(it);
+                    response = "$-1\r\n";
+                  }
+                  else{
+                    const std::string &value = it->second;
+                    response = "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
+                  }
+                  
                 }
                 send(fd,response.c_str(),response.size(),0);
               }
