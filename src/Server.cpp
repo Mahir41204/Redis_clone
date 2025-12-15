@@ -9,16 +9,27 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include <unordered_map>
 
 int make_non_blocking(int fd){
   return fcntl(fd, F_SETFL, fcntl(fd,F_GETFL,0) | O_NONBLOCK);
 }
+
 std::string read_line(const std::string & data,size_t & pos){
   size_t end =data.find("\r\n",pos);
+  
+  //basic error handling, in real code buffer until full command
+  if(end == std::string::npos){
+    return "";
+  }
+  
   std::string line =data.substr(pos,end-pos);
   pos = end+2;
   return line;
 }
+
+//in-memory db...hash table...
+std::unordered_map<std::string,std::string> db;
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -99,8 +110,14 @@ int main(int argc, char **argv) {
             std::string input(buffer);
             size_t pos=0;
             if(input[0]=='*'){
+
+              //first line: number of bulk string arguments
               int arg_count=std::stoi(read_line(input, pos).substr(1));
+              
+              //second line: length
               std::string command = read_line(input, pos);
+              
+              //third line: commands(ping,echo,set,get,...)
               command =read_line(input, pos);
               
               if(command == "PING"){
@@ -112,6 +129,37 @@ int main(int argc, char **argv) {
                 //int len = std::stoi(mssg_len.substr(1));
                 std::string mssg =read_line(input,pos);
                 std::string response = "$" + std::to_string(mssg.size()) + "\r\n" + mssg + "\r\n" ;
+                send(fd,response.c_str(),response.size(),0);
+              }
+              else if(command == "SET" && arg_count==3){
+                //reading key
+                std::string key_len_line = read_line(input,pos);
+                std::string key = read_line(input,pos);
+                
+                //reading value
+                std::string val_len_line = read_line(input,pos);
+                std::string value = read_line(input,pos);
+
+                //store in db
+                db[key]=value;
+
+                std::string response = "+OK\r\n";
+                send(fd,response.c_str(),response.size(),0);
+              }
+              else if(command == "GET" && arg_count==2){
+                
+                std::string key_len_line = read_line(input,pos);
+                std::string key = read_line(input,pos);
+
+                auto it = db.find(key);
+                std::string response;
+                if(it == db.end()){
+                  response = "$-1\r\n";
+                }
+                else{
+                  const std::string &value = it->second;
+                  response = "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
+                }
                 send(fd,response.c_str(),response.size(),0);
               }
             
