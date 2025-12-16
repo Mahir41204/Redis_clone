@@ -51,11 +51,26 @@ bool is_expired(const Expiry_db & e){
   return ((e.expire_time_ms != NO_EXPIRY) && current_time() >= e.expire_time_ms);
 }
 
+std::unordered_map<std::string,std::string> config;
+
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
   
+  config["dir"] = "";
+  config["dbfile"] = "";
+
+  for(int i=0;i<argc;i++){
+    std::string arg = argv[i];
+    if(arg == "--dir" && i+1 < argc){
+      config["dir"] = argv[++i];
+    }
+    else if(arg == "--dbfile" && i+1 < argc){
+      config["dbfile"] = argv[++i];
+    }
+  }
+
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0) {
    std::cerr << "Failed to create server socket\n";
@@ -128,6 +143,7 @@ int main(int argc, char **argv) {
           else{
             buffer[bytes_read] ='\0';
             std::string input(buffer);
+            std::string response;
             size_t pos=0;
             if(input[0]=='*'){
 
@@ -141,14 +157,14 @@ int main(int argc, char **argv) {
               command =read_line(input, pos);
               
               if(command == "PING"){
-                std:: string response = "+PONG\r\n";
+                response = "+PONG\r\n";
                 send(fd,response.c_str(), response.size(), 0);
               }
               else if(command =="ECHO" && arg_count==2){
                 std::string mssg_len = read_line(input,pos);
                 //int len = std::stoi(mssg_len.substr(1));
                 std::string mssg =read_line(input,pos);
-                std::string response = "$" + std::to_string(mssg.size()) + "\r\n" + mssg + "\r\n" ;
+                response = "$" + std::to_string(mssg.size()) + "\r\n" + mssg + "\r\n" ;
                 send(fd,response.c_str(),response.size(),0);
               }
               else if(command == "SET" && (arg_count==3 || arg_count==5)){
@@ -182,7 +198,7 @@ int main(int argc, char **argv) {
                 //store in db
                 db[key]=Expiry_db{value,expire_time};
 
-                std::string response = "+OK\r\n";
+                response = "+OK\r\n";
                 send(fd,response.c_str(),response.size(),0);
               }
               else if(command == "GET" && arg_count==2){
@@ -191,7 +207,7 @@ int main(int argc, char **argv) {
                 std::string key = read_line(input,pos);
 
                 auto it = db.find(key);
-                std::string response;
+                
                 if(it == db.end()){
                   response = "$-1\r\n";
                 }
@@ -210,6 +226,31 @@ int main(int argc, char **argv) {
 
                 }
                 send(fd,response.c_str(),response.size(),0);
+              }
+              else if(command == "CONFIG" && arg_count == 3){
+
+                std::string subcommand_len = read_line(input,pos);
+                std::string subcommand = read_line(input,pos);
+
+                for(char &c : subcommand){
+                  c = std::toupper(static_cast<unsigned char>(c));
+                }
+
+                if(subcommand=="GET"){
+                  std::string key_len = read_line(input,pos);
+                  std::string key = read_line(input,pos);
+                  
+                  auto it = config.find(key);
+
+                  if(it == config.end()){
+                    response = "0*\r\n";
+                  }
+                  else{
+                    const std::string &value = it->second;
+                    response = "*2\r\n$" + std::to_string(key.size()) + "\r\n" + key + "\r\n$" + std::to_string(value.size()) + "\r\n" + value + "\r\n"; 
+                  }
+                  send(fd,response.c_str(),response.size(),0);
+                }
               }
             
             }
