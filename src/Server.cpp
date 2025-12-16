@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <unordered_map>
 #include <chrono>
+#include <fstream>
 
 int make_non_blocking(int fd){
   return fcntl(fd, F_SETFL, fcntl(fd,F_GETFL,0) | O_NONBLOCK);
@@ -53,6 +54,50 @@ bool is_expired(const Expiry_db & e){
 
 std::unordered_map<std::string,std::string> config;
 
+void load_rdb_file(const std::string &dir, const std::string &filename){
+  if(dir.empty() || filename.empty()) return;
+
+  std::string path = dir + "/" + filename;
+  std::ifstream file(path, std::ios::binary);
+
+  if(!file.is_open()){
+    std::cerr << "RDB file not found: " << path <<"\n";
+    return;
+  }
+
+  char header[9];
+  file.read(header,9);
+
+  while(file.good()){
+    unsigned char type;
+    file.read(reinterpret_cast<char*>(&type),1);
+    
+    if(type==0xFF) break;
+
+    if(type == 0xFE || type == 0xFA){
+      unsigned char len;
+      file.read(interpret_cast<char*>(&len),1);
+      file.ignore(len);
+      continue;
+    }
+
+    if(type == 0x00){
+      unsigned char key_len;
+      file.read(reinterpret_cast<char*>(&key_len),1);
+      
+      std::string key(key_len,'\0');
+      file.read(&key[0],key_len);
+
+      unsigned char val_len;
+      file.read(reinterpret_cast<char*>(&val_len),1);
+      file.ignore(val_len);
+
+      db[key] = Expiry_db{"",NO_EXPIRY};
+      break;
+    }
+  }
+  file.close();
+}
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
   std::cout << std::unitbuf;
@@ -60,6 +105,8 @@ int main(int argc, char **argv) {
   
   config["dir"] = "";
   config["dbfile"] = "";
+
+  load_rdb_file(config["dir"], config["dbfile"]);
 
   for(int i=0;i<argc;i++){
     std::string arg = argv[i];
@@ -251,6 +298,26 @@ int main(int argc, char **argv) {
                   }
                   send(fd,response.c_str(),response.size(),0);
                 }
+              }
+
+              else if(command == "KEYS" && arg_count ==2){
+
+                std::string patter_len = read_line(input,pos);
+                std::string pattern = read_line(input,pos);
+
+                if(pattern == "*"){
+                  response = "*" + std::to_string(db.size()) + "\r\n";
+
+                  for(const auto &pair : db){
+                    const std::string &key = pair.first;
+                    response += "$" + std::to_string(key.size()) + "\r\n" + key + "\r\n";
+                  }
+                  send(fd,response.c_str(),response.size(),0);
+                }
+                else{
+                  send(fd,"*0\r\n",4,0);
+                }
+
               }
             
             }
