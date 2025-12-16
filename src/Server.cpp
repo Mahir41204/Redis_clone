@@ -54,12 +54,47 @@ bool is_expired(const Expiry_db & e){
 
 std::unordered_map<std::string,std::string> config;
 
+uint64_t read_rdb_length(std::ifstream &file, bool &is_encoded){
+
+  unsigned char first;
+  file.read(reinterpret_cast<char*>(&first),1);
+
+  unsigned char type = (first & 0xC0) >> 6;
+
+  if(type == 0){
+    is_encoded = false;
+    return first& 0x3F;
+  }
+  else if(type ==1){
+    unsigned char second;
+    file.read(reinterpret_cast<char*>(&second),1);
+    is_encoded = false;
+    return ((first & 0x3F) << 8) | second;
+  }
+  else if(type==2){
+    uint32_t len;
+    file.read(reinterpret_cast<char*>(&len),4);
+    is_encoded = false;
+    return ntohl(len);
+  }
+  else{
+
+    is_encoded = true;
+    return first & 0x3F;
+    //throw std::runtime_error("Invlaid RDB length encoding");
+  }
+}
+
+
 void load_rdb_file(const std::string &dir, const std::string &filename){
+  
   if(dir.empty() || filename.empty()) return;
 
   std::string path = dir + "/" + filename;
   std::ifstream file(path, std::ios::binary);
 
+  std::cerr << "Loading RDB from: " << path << "\n";
+  
   if(!file.is_open()){
     std::cerr << "RDB file not found: " << path <<"\n";
     return;
@@ -69,55 +104,106 @@ void load_rdb_file(const std::string &dir, const std::string &filename){
   file.read(header,9);
 
   while(file.good()){
-    unsigned char type;
-    file.read(reinterpret_cast<char*>(&type),1);
+    unsigned char opcode;
+    file.read(reinterpret_cast<char*>(&opcode),1);
     
-    if(type==0xFF) break;
+    if(opcode==0xFF) break;
 
-    if(type == 0xFE || type == 0xFA){
-      unsigned char len;
-      file.read(interpret_cast<char*>(&len),1);
-      file.ignore(len);
+
+    //metadata opcodes (key+value)
+    if(opcode == 0xFA){
+
+      bool encode;
+
+      uint64_t key_len = read_rdb_length(file,encode);;
+      if(encode){
+        file.ignore(key_len == 0 ? 1 : key_len == 1?2 :4);
+      }
+      else{
+        file.ignore(key_len);
+      }
+      
+      uint64_t value_len = read_rdb_length(file,encode);;
+      if(encode){
+        file.ignore(value_len == 0 ? 1 : value_len == 1?2 :4);
+      }
+      else{
+        file.ignore(value_len);
+      }
       continue;
     }
 
-    if(type == 0x00){
-      unsigned char key_len;
-      file.read(reinterpret_cast<char*>(&key_len),1);
+    //database opcode
+    if(opcode == 0xFE){
+      bool encode;
+      read_rdb_length(file,encode);
+      continue;
+    }
+
+    if(opcode == 0xFB){
+      bool encode;
+      read_rdb_length(file,encode);
+      read_rdb_length(file,encode);
+      continue;
+    }
+
+    long long expiry = NO_EXPIRY;
+    if(opcode == 0xFC){
+      uint64_t expire_time_ms;
+      file.read(reinterpret_cast<char*>(&expire_time_ms),8);
+      expiry = expire_time_ms;
+      file.read(reinterpret_cast<char*>(&opcode),1);
+      continue;
+    }
+    if(opcode == 0xFD){
+      uint32_t expire_time_sec;
+      file.read(reinterpret_cast<char*>(&expire_time_sec),4);
+      expiry = static_cast<long long>(expire_time_sec) * 1000;
+      file.read(reinterpret_cast<char*>(&opcode),1);
+      continue;
+    }
+
+    if(opcode == 0x00){
+      
+      bool encode;
+
+      uint64_t key_len = read_rdb_length(file,encode);
       
       std::string key(key_len,'\0');
       file.read(&key[0],key_len);
 
-      unsigned char val_len;
-      file.read(reinterpret_cast<char*>(&val_len),1);
-      file.ignore(val_len);
+      uint64_t val_len = read_rdb_length(file,encode);
+      std::string value(val_len,'\0');
+      file.read(&value[0],val_len);
 
-      db[key] = Expiry_db{"",NO_EXPIRY};
+      db[key] = Expiry_db{value,NO_EXPIRY};
+      std::cerr << "Loaded key from RDB: " << key << "\n";
       break;
     }
   }
   file.close();
 }
+
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
   
   config["dir"] = "";
-  config["dbfile"] = "";
+  config["dbfilename"] = "";
 
-  load_rdb_file(config["dir"], config["dbfile"]);
-
-  for(int i=0;i<argc;i++){
+  for(int i=1;i<argc;i++){
     std::string arg = argv[i];
     if(arg == "--dir" && i+1 < argc){
       config["dir"] = argv[++i];
     }
-    else if(arg == "--dbfile" && i+1 < argc){
-      config["dbfile"] = argv[++i];
+    else if(arg == "--dbfilename" && i+1 < argc){
+      config["dbfilename"] = argv[++i];
     }
   }
-
+  
+  load_rdb_file(config["dir"], config["dbfilename"]);
+  
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0) {
    std::cerr << "Failed to create server socket\n";
@@ -290,7 +376,7 @@ int main(int argc, char **argv) {
                   auto it = config.find(key);
 
                   if(it == config.end()){
-                    response = "0*\r\n";
+                    response = "*0\r\n";
                   }
                   else{
                     const std::string &value = it->second;
@@ -302,7 +388,7 @@ int main(int argc, char **argv) {
 
               else if(command == "KEYS" && arg_count ==2){
 
-                std::string patter_len = read_line(input,pos);
+                std::string pattern_len = read_line(input,pos);
                 std::string pattern = read_line(input,pos);
 
                 if(pattern == "*"){
